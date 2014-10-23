@@ -1,7 +1,13 @@
 package edu.temple.soundgram;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -17,6 +23,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
@@ -45,6 +52,41 @@ public class MainActivity extends Activity {
 	
 	LinearLayout ll;
 	
+	//once file is downloaded, this handler will be used to play it from cache 
+	private Handler SoundGramDownloadHandler = new Handler(new Handler.Callback() {
+		
+		@Override	
+		public boolean handleMessage(Message msg) {
+			MediaPlayer mPlayer = new MediaPlayer();
+			
+			mPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+			
+			//preparing media player to play the file 
+			
+			try{
+		  	mPlayer.setDataSource(msg.obj.toString());
+		  	mPlayer.prepare();
+			}
+			catch(Exception e){
+				e.printStackTrace();
+			}
+		  	mPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+				
+				@Override
+				public void onPrepared(MediaPlayer mp) {
+					// TODO Auto-generated method stub
+					//System.out.println("***** about to play");
+     			 	Toast.makeText(getApplicationContext(), 
+			        		"Playing downloaded SoundGram.", Toast.LENGTH_LONG).show(); 
+					mp.start();
+				}
+			});
+           	
+		  	//mPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+			return false;
+			
+		}
+		});
 	
 	// Refresh stream
 	private BroadcastReceiver refreshReceiver = new BroadcastReceiver() {
@@ -210,6 +252,7 @@ public class MainActivity extends Activity {
 		
 	}
 	
+	
 	Handler displayStreamHandler = new Handler(new Handler.Callback() {
 		
 		@Override
@@ -250,9 +293,121 @@ public class MainActivity extends Activity {
 			public void onClick(View v) {
 				MediaPlayer mPlayer = new MediaPlayer();
 		        try {
-		            mPlayer.setDataSource(soundgramObject.getString("audio_url"));
+		        	/*
+		        	 * this is where the audio clip associated with the photo clip
+		        	 * is played when an image is clicked
+		        	 */
+		        	
+		        	String myFilePath = "";
+		        	File extStore = Environment.getExternalStorageDirectory();
+		        	File myFile = new File(extStore.getAbsolutePath() + "/cache" + soundgramObject.getString("audio_url").substring(soundgramObject.getString("audio_url").lastIndexOf("=")+1));
+		        	
+		        	//myFilePath = 
+		        	
+		        	if(myFile.exists() && myFile.isFile())
+		        	{
+		               	Toast.makeText(getApplicationContext(), 
+			        	"File is Stored Locally", Toast.LENGTH_LONG).show();
+		            //mPlayer.setDataSource(soundgramObject.getString("audio_url"));
+		               	
+		               	//setting up the media player to play the file
+					  	mPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
+					  	mPlayer.setDataSource(myFile.toString());
+					  	mPlayer.prepare();
+					  	mPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+							
+							@Override
+							public void onPrepared(MediaPlayer mp) {
+								// TODO Auto-generated method stub
+								//System.out.println("***** about to play");
+								mp.start();
+							}
+						});
+		               	
+		          /*  mPlayer.setDataSource(myFile.toString());   	
 		            mPlayer.prepare();
-		            mPlayer.start();
+		            mPlayer.start();*/
+		        	}
+		        	else{
+		               	Toast.makeText(getApplicationContext(), 
+			        		"File is not stored locally", Toast.LENGTH_SHORT).show();
+		               	
+		               	Thread downloadThread = new Thread(){
+		               		@Override
+				        	public void run(){
+		               			try{
+		               				
+		               				//get proper file path and then create a new file
+		               				File downloadExtStore = Environment.getExternalStorageDirectory();
+		               				File downloadFile = new File(downloadExtStore.getAbsolutePath() + "/cache" + soundgramObject.getString("audio_url").substring(soundgramObject.getString("audio_url").lastIndexOf("=")+1));
+		               				
+
+				     				OutputStream fileOutput = new BufferedOutputStream(new FileOutputStream(downloadFile));
+				     				
+				     				/*
+				     				 * downloading the file 
+				     				 * sample code stack overflow
+				     				 * use idea from previous labs
+				     				 */
+				     				
+				     				/*
+				     				http://stackoverflow.com/questions/11708040/how-can-i-download-image-file-from-an-url-to-bytearray
+				     				*/
+				     				
+				     				/*
+				     				 * http://stackoverflow.com/questions/9372372/how-to-download-full-data-to-a-byte-array
+				     				 */
+				     				
+				     				URL fileURL = new URL(soundgramObject.get("audio_url").toString());				
+				     				
+				     				//System.out.println("********** URL ********");
+				     				
+				     				HttpURLConnection urlConnection = (HttpURLConnection) fileURL.openConnection();
+				     				
+				     				//apparently these have to be called before connection is made
+				     				urlConnection.setRequestMethod("GET");
+				     				urlConnection.setDoOutput(true);	
+				     				
+				     				urlConnection.connect();
+				    					
+				    				
+				     				InputStream in = urlConnection.getInputStream();
+				     		
+				     				/*
+				     				 * downloading file contents and storing in byte array
+				     				 */
+				     				
+				     				byte[] downloadByteArray = new byte[5120];
+				     				int byteArrayLength = -1;
+				     				
+				     				while((byteArrayLength = in.read(downloadByteArray)) != -1)
+				     				{
+				     					fileOutput.write(downloadByteArray, 0, byteArrayLength);
+				     				}
+				     				
+				     				in.close();
+				     				
+				     				fileOutput.flush(); //flush outputstream before closing
+				     				fileOutput.close();
+				     			
+				     				
+				     				//urlConnection.disconnect();			     	
+				     			 	
+				     			 				     			 	
+				     				 Message msg = Message.obtain();
+									 msg.obj = downloadFile;
+									 SoundGramDownloadHandler.sendMessage(msg); //pass message from working thread to the handler 
+		               				
+									 //System.out.println("after download");
+									 
+		               			}catch(Exception e){
+		               				e.printStackTrace();
+		               			}
+		               		}
+		               	};
+		               	downloadThread.start();//start the thread
+		        	}
+		        	
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
